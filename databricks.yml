@@ -1,0 +1,59 @@
+# Advanced Genie Monitoring: Databricks Asset Bundle.
+#
+#   databricks bundle deploy --profile <profile>
+#   databricks bundle run genie_monitoring_refresh --profile <profile>
+#
+# Deploys one daily serverless job and an empty secret scope. The first run creates the tables
+# and the dashboard. Everything works without changing a variable; see DEPLOY.md for what each one does.
+bundle:
+  name: advanced_genie_monitoring
+
+variables:
+  catalog:
+    description: Catalog for the job's tables. Blank uses the workspace's default catalog.
+    default: ""
+  schema:
+    description: Schema for the job's tables (created if missing).
+    default: genie_monitoring
+  warehouse_id:
+    description: SQL warehouse for the dashboard. Blank picks one (serverless first).
+    default: ""
+  bu_label:
+    description: Dashboard label for workspace_summary.bu (e.g. Team, Application).
+    default: Business Unit
+  environment_label:
+    description: Dashboard label for workspace_summary.environment (e.g. Stage, Region).
+    default: Environment
+
+resources:
+  secret_scopes:
+    genie_monitoring:
+      # Empty until you add client_id / client_secret to turn on budgets (DEPLOY.md).
+      name: genie_monitoring
+
+  jobs:
+    genie_monitoring_refresh:
+      name: Advanced Genie Monitoring - daily refresh
+      max_concurrent_runs: 1
+      timeout_seconds: 7200
+      schedule:
+        quartz_cron_expression: "0 0 4 * * ?"
+        timezone_id: UTC
+        pause_status: UNPAUSED
+      parameters:
+        - {name: catalog, default: "${var.catalog}"}
+        - {name: schema, default: "${var.schema}"}
+        - {name: secret_scope, default: "${resources.secret_scopes.genie_monitoring.name}"}
+        - {name: warehouse_id, default: "${var.warehouse_id}"}
+        - {name: dashboard_folder, default: "/Workspace/Users/${workspace.current_user.userName}/advanced_genie_monitoring"}
+        - {name: overwrite_dashboard, default: "false"}
+        - {name: bu_label, default: "${var.bu_label}"}
+        - {name: environment_label, default: "${var.environment_label}"}
+      tasks:
+        - task_key: refresh
+          notebook_task:
+            notebook_path: ./src/genie_monitoring_refresh.py
+
+targets:
+  default:
+    default: true
